@@ -33,7 +33,7 @@ THE SOFTWARE.
 #endif
 
 #if USE_NEON
-    #include "sse2neon.h"
+    #include "../../../3rdparty/sse2neon.h"
 #else
     #include <mmintrin.h>
     #include <xmmintrin.h>

@@ -79,11 +79,6 @@ set(WORLD_SOURCES
     src/world/world.cpp
     src/world/world.h)
 
-if (APPLE AND CMAKE_OSX_ARCHITECTURES=arm64)
-    list (APPEND ACCELERATOR_SOURCES
-    src/accelerator/sse2neon.h)
-endif (APPLE AND CMAKE_OSX_ARCHITECTURES=arm64)
-
 if (RR_USE_EMBREE)
     list (APPEND DEVICE_SOURCES 
     src/device/embree_intersection_device.cpp
@@ -232,9 +227,9 @@ if (UNIX AND NOT APPLE)
         string(REGEX MATCH "[0-9]*\.[0-9]*$" RR_API_VERSION ${RR_API_VERSION})
         
         set_target_properties(RadeonRays PROPERTIES SOVERSION ${RR_API_VERSION})
-elseif (APPLE AND CMAKE_OSX_ARCHITECTURES=arm64)
-    target_compile_options(RadeonRays PUBLIC -stdlib=libc++ -mmacosx-version-min=10.12)
-elseif (APPLE)
+elseif (APPLE AND CMAKE_OSX_ARCHITECTURES MATCHES "arm64")
+    target_compile_options(RadeonRays PUBLIC -stdlib=libc++ -mmacosx-version-min=11.0)
+elseif (APPLE AND CMAKE_OSX_ARCHITECTURES MATCHES "x86_64")
     target_compile_options(RadeonRays PUBLIC -stdlib=libc++ -msse4.1 -mmacosx-version-min=10.12)
 endif (UNIX AND NOT APPLE)
 

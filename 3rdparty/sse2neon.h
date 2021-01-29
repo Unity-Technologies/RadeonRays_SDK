@@ -52,6 +52,10 @@
  * This would slow down the computation a bit, but gives consistent result with
  * x86 SSE2. (e.g. would solve a hole or NaN pixel in the rendering result)
  */
+
+// Github repo link: https://github.com/DLTcollab/sse2neon
+// Revision: 9ea108c61bee9843afd740fbff666ede57b9cae4
+
 #ifndef SSE2NEON_PRECISE_MINMAX
 #define SSE2NEON_PRECISE_MINMAX (0)
 #endif
@@ -196,6 +200,9 @@ typedef int64x2_t __m128i; /* 128-bit vector containing integers */
 #define vreinterpretq_m128i_u16(x) vreinterpretq_s64_u16(x)
 #define vreinterpretq_m128i_u32(x) vreinterpretq_s64_u32(x)
 #define vreinterpretq_m128i_u64(x) vreinterpretq_s64_u64(x)
+
+#define vreinterpretq_f32_m128i(x) vreinterpretq_f32_s64(x)
+#define vreinterpretq_f64_m128i(x) vreinterpretq_f64_s64(x)
 
 #define vreinterpretq_s8_m128i(x) vreinterpretq_s8_s64(x)
 #define vreinterpretq_s16_m128i(x) vreinterpretq_s16_s64(x)
@@ -768,8 +775,8 @@ FORCE_INLINE __m128i _mm_set_epi32(int i3, int i2, int i1, int i0)
 // https://msdn.microsoft.com/en-us/library/dk2sdw0h(v=vs.120).aspx
 FORCE_INLINE __m128i _mm_set_epi64x(int64_t i1, int64_t i2)
 {
-    int64_t ALIGN_STRUCT(16) data[2] = {i2, i1};
-    return vreinterpretq_m128i_s64(vld1q_s64(data));
+    return vreinterpretq_m128i_s64(
+        vcombine_s64(vcreate_s64(i2), vcreate_s64(i1)));
 }
 
 // Returns the __m128i structure with its two 64-bit integer values
@@ -798,6 +805,51 @@ FORCE_INLINE __m128d _mm_set_pd(double e1, double e0)
 FORCE_INLINE void _mm_store_ps(float *p, __m128 a)
 {
     vst1q_f32(p, vreinterpretq_f32_m128(a));
+}
+
+// Store the lower single-precision (32-bit) floating-point element from a into
+// 4 contiguous elements in memory. mem_addr must be aligned on a 16-byte
+// boundary or a general-protection exception may be generated.
+//
+//   MEM[mem_addr+31:mem_addr] := a[31:0]
+//   MEM[mem_addr+63:mem_addr+32] := a[31:0]
+//   MEM[mem_addr+95:mem_addr+64] := a[31:0]
+//   MEM[mem_addr+127:mem_addr+96] := a[31:0]
+//
+// https://software.intel.com/sites/landingpage/IntrinsicsGuide/#text=_mm_store_ps1
+FORCE_INLINE void _mm_store_ps1(float *p, __m128 a)
+{
+    float32_t a0 = vgetq_lane_f32(vreinterpretq_f32_m128(a), 0);
+    vst1q_f32(p, vdupq_n_f32(a0));
+}
+
+// Store the lower single-precision (32-bit) floating-point element from a into
+// 4 contiguous elements in memory. mem_addr must be aligned on a 16-byte
+// boundary or a general-protection exception may be generated.
+//
+//   MEM[mem_addr+31:mem_addr] := a[31:0]
+//   MEM[mem_addr+63:mem_addr+32] := a[31:0]
+//   MEM[mem_addr+95:mem_addr+64] := a[31:0]
+//   MEM[mem_addr+127:mem_addr+96] := a[31:0]
+//
+// https://software.intel.com/sites/landingpage/IntrinsicsGuide/#text=_mm_store1_ps
+#define _mm_store1_ps _mm_store_ps1
+
+// Store 4 single-precision (32-bit) floating-point elements from a into memory
+// in reverse order. mem_addr must be aligned on a 16-byte boundary or a
+// general-protection exception may be generated.
+//
+//   MEM[mem_addr+31:mem_addr] := a[127:96]
+//   MEM[mem_addr+63:mem_addr+32] := a[95:64]
+//   MEM[mem_addr+95:mem_addr+64] := a[63:32]
+//   MEM[mem_addr+127:mem_addr+96] := a[31:0]
+//
+// https://software.intel.com/sites/landingpage/IntrinsicsGuide/#text=_mm_storer_ps
+FORCE_INLINE void _mm_storer_ps(float *p, __m128 a)
+{
+    float32x4_t tmp = vrev64q_f32(vreinterpretq_f32_m128(a));
+    float32x4_t rev = vextq_f32(tmp, tmp, 2);
+    vst1q_f32(p, rev);
 }
 
 // Stores four single-precision, floating-point values.
@@ -1182,8 +1234,8 @@ FORCE_INLINE __m128 _mm_andnot_ps(__m128 a, __m128 b)
 // elements in a and then AND with b, and store the results in dst.
 //
 //   FOR j := 0 to 1
-// 	     i := j*64
-// 	     dst[i+63:i] := ((NOT a[i+63:i]) AND b[i+63:i])
+//       i := j*64
+//       dst[i+63:i] := ((NOT a[i+63:i]) AND b[i+63:i])
 //   ENDFOR
 //
 // https://software.intel.com/sites/landingpage/IntrinsicsGuide/#text=_mm_andnot_pd
@@ -2366,19 +2418,6 @@ FORCE_INLINE __m128i _mm_srl_epi64(__m128i a, __m128i count)
 // https://msdn.microsoft.com/en-us/library/vstudio/s090c8fk(v=vs.100).aspx
 FORCE_INLINE int _mm_movemask_epi8(__m128i a)
 {
-#if defined(__aarch64__)
-    uint8x16_t input = vreinterpretq_u8_m128i(a);
-    const int8_t ALIGN_STRUCT(16)
-        xr[16] = {-7, -6, -5, -4, -3, -2, -1, 0, -7, -6, -5, -4, -3, -2, -1, 0};
-    const uint8x16_t mask_and = vdupq_n_u8(0x80);
-    const int8x16_t mask_shift = vld1q_s8(xr);
-    const uint8x16_t mask_result =
-        vshlq_u8(vandq_u8(input, mask_and), mask_shift);
-    uint8x8_t lo = vget_low_u8(mask_result);
-    uint8x8_t hi = vget_high_u8(mask_result);
-
-    return vaddv_u8(lo) + (vaddv_u8(hi) << 8);
-#else
     // Use increasingly wide shifts+adds to collect the sign bits
     // together.
     // Since the widening shifts would be rather confusing to follow in little
@@ -2455,7 +2494,6 @@ FORCE_INLINE int _mm_movemask_epi8(__m128i a)
     //                      d2
     // Note: Little endian would return the correct value 4b (01001011) instead.
     return vgetq_lane_u8(paired64, 0) | ((int) vgetq_lane_u8(paired64, 8) << 8);
-#endif
 }
 
 // Copy the lower 64-bit integer in a to dst.
@@ -3054,6 +3092,28 @@ FORCE_INLINE __m128d _mm_add_pd(__m128d a, __m128d b)
     double c[2];
     c[0] = da[0] + db[0];
     c[1] = da[1] + db[1];
+    return vld1q_f32((float32_t *) c);
+#endif
+}
+
+// Add the lower double-precision (64-bit) floating-point element in a and b,
+// store the result in the lower element of dst, and copy the upper element from
+// a to the upper element of dst.
+//
+//   dst[63:0] := a[63:0] + b[63:0]
+//   dst[127:64] := a[127:64]
+//
+// https://software.intel.com/sites/landingpage/IntrinsicsGuide/#text=_mm_add_sd
+FORCE_INLINE __m128d _mm_add_sd(__m128d a, __m128d b)
+{
+#if defined(__aarch64__)
+    return _mm_move_sd(a, _mm_add_pd(a, b));
+#else
+    double *da = (double *) &a;
+    double *db = (double *) &b;
+    double c[2];
+    c[0] = da[0] + db[0];
+    c[1] = da[1];
     return vld1q_f32((float32_t *) c);
 #endif
 }
@@ -4984,6 +5044,18 @@ FORCE_INLINE __m128i _mm_cvtps_epi32(__m128 a)
 #endif
 }
 
+// Convert packed single-precision (32-bit) floating-point elements in a to
+// packed 16-bit integers, and store the results in dst. Note: this intrinsic
+// will generate 0x7FFF, rather than 0x8000, for input values between 0x7FFF and
+// 0x7FFFFFFF.
+//
+// https://software.intel.com/sites/landingpage/IntrinsicsGuide/#text=_mm_cvtps_pi16
+FORCE_INLINE __m64 _mm_cvtps_pi16(__m128 a)
+{
+    return vreinterpret_m64_s16(
+        vmovn_s32(vreinterpretq_s32_m128i(_mm_cvtps_epi32(a))));
+}
+
 // Copy the lower 32-bit integer in a to dst.
 //
 //   dst[31:0] := a[31:0]
@@ -5051,6 +5123,18 @@ FORCE_INLINE __m128i _mm_castps_si128(__m128 a)
     return vreinterpretq_m128i_s32(vreinterpretq_s32_m128(a));
 }
 
+// Cast vector of type __m128i to type __m128d. This intrinsic is only used for
+// compilation and does not generate any instructions, thus it has zero latency.
+// https://software.intel.com/sites/landingpage/IntrinsicsGuide/#text=_mm_castsi128_pd
+FORCE_INLINE __m128d _mm_castsi128_pd(__m128i a)
+{
+#if defined(__aarch64__)
+    return vreinterpretq_m128d_f64(vreinterpretq_f64_m128i(a));
+#else
+    return vreinterpretq_m128d_f32(vreinterpretq_f32_m128i(a));
+#endif
+}
+
 // Applies a type cast to reinterpret four 32-bit integers passed in as a
 // 128-bit parameter as packed 32-bit floating point values.
 // https://msdn.microsoft.com/en-us/library/bb514029.aspx
@@ -5081,6 +5165,15 @@ FORCE_INLINE __m128d _mm_load1_pd(const double *p)
     return vreinterpretq_m128d_s64(vdupq_n_s64(*(const int64_t *) p));
 #endif
 }
+
+// Load a double-precision (64-bit) floating-point element from memory into both
+// elements of dst.
+//
+//   dst[63:0] := MEM[mem_addr+63:mem_addr]
+//   dst[127:64] := MEM[mem_addr+63:mem_addr]
+//
+// https://software.intel.com/sites/landingpage/IntrinsicsGuide/#text=_mm_load_pd1
+#define _mm_load_pd1 _mm_load1_pd
 
 // Load a double-precision (64-bit) floating-point element from memory into the
 // upper element of dst, and copy the lower element from a to dst. mem_addr does
@@ -5312,6 +5405,17 @@ FORCE_INLINE __m64 _mm_cvt_ps2pi(__m128 a)
             _mm_round_ps(a, _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC)))));
 #endif
 }
+
+// Convert packed single-precision (32-bit) floating-point elements in a to
+// packed 32-bit integers, and store the results in dst.
+//
+//   FOR j := 0 to 1
+//       i := 32*j
+//       dst[i+31:i] := Convert_FP32_To_Int32(a[i+31:i])
+//   ENDFOR
+//
+// https://software.intel.com/sites/landingpage/IntrinsicsGuide/#text=_mm_cvtps_pi32
+#define _mm_cvtps_pi32(a) _mm_cvt_ps2pi(a)
 
 // Round the packed single-precision (32-bit) floating-point elements in a up to
 // an integer value, and store the results as packed single-precision
