@@ -83,6 +83,10 @@ CheckFileError();
 
 if ($Config{osname} eq "darwin")
 {
+	if (system("cmake -version"))
+	{
+		system("brew install cmake") && die("Failed to install cmake");
+	}
 
 	BuildRadeonRays($mac_x64);
 	mkpath('artifacts/lib/macOS/x64', {error => \ $err} );
