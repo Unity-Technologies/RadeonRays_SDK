@@ -228,9 +228,9 @@ if (UNIX AND NOT APPLE)
         
         set_target_properties(RadeonRays PROPERTIES SOVERSION ${RR_API_VERSION})
 elseif (APPLE AND CMAKE_OSX_ARCHITECTURES MATCHES "arm64")
-    target_compile_options(RadeonRays PUBLIC -stdlib=libc++ -mmacosx-version-min=11.0)
+    target_compile_options(RadeonRays PUBLIC -stdlib=libc++)
 elseif (APPLE AND CMAKE_OSX_ARCHITECTURES MATCHES "x86_64")
-    target_compile_options(RadeonRays PUBLIC -stdlib=libc++ -msse4.1 -mmacosx-version-min=10.12)
+    target_compile_options(RadeonRays PUBLIC -stdlib=libc++ -msse4.1)
 endif (UNIX AND NOT APPLE)
 
 
