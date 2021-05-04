@@ -1,0 +1,67 @@
+linux:
+    name: Build RadeonRays - Linux
+
+    agent:
+      type: Unity::VM
+      image: build-system/unity-extra-ubuntu-16.04-katana:v0.1-592520
+      flavor: b1.xlarge
+
+    commands:
+      - perl build.pl
+
+    artifacts:
+      build:
+        paths:
+          - artifacts/**
+          
+mac:
+    name: Build RadeonRays - Mac
+
+    agent:
+      type: Unity::VM::osx
+      image: sustained-engineering/scd-macos-bokken-katana-agent:v0.3.1-653846
+      flavor: b1.xlarge
+
+    commands:
+      - perl build.pl
+
+    artifacts:
+      build:
+        paths:
+          - artifacts/**
+
+windows:
+    name: Build RadeonRays - Mac
+
+    agent:
+      type: Unity::VM
+      image: build-system/unity-extra-windows-10-katana:v0.4.4-699775
+      flavor: b1.xlarge
+
+    commands:
+      - build.cmd
+
+    artifacts:
+      build:
+        paths:
+          - artifacts/**
+          
+complete:
+    name: Build RadeonRays - ACompleteBuild
+    agent:
+      type: Unity::VM
+      image: build-system/unity-extra-ubuntu-18.04-katana:v0.2-592517
+      flavor: b1.xlarge
+      
+    dependencies:
+      - .yamato/build.yml#linux
+      - .yamato/build.yml#mac
+      - .yamato/build.yml#windows
+
+    commands:
+      - perl completebuild.pl
+
+    artifacts:
+      build:
+        paths:
+          - builds.zip
