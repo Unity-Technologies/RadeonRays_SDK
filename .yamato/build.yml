@@ -59,6 +59,7 @@ complete:
       - .yamato/build.yml#windows
 
     commands:
+      - mv artifacts build
       - perl completebuild.pl
 
     artifacts:
