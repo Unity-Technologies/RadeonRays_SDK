@@ -31,7 +31,7 @@ mac:
           - artifacts/**
 
 windows:
-    name: Build RadeonRays - Mac
+    name: Build RadeonRays - Windows
 
     agent:
       type: Unity::VM
